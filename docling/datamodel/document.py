@@ -208,19 +208,6 @@ class ConversionResult(BaseModel):
 
     document: DoclingDocument = _EMPTY_DOCLING_DOC
 
-    def get_original_markdown(self) -> Optional[str]:
-        """Get the original markdown content if the backend supports it.
-        
-        Returns:
-            The original markdown content if this was a markdown conversion,
-            None otherwise.
-        """
-        from docling.backend.md_backend import MarkdownDocumentBackend
-        
-        if isinstance(self.input._backend, MarkdownDocumentBackend):
-            return self.input._backend.get_original_markdown()
-        return None
-
     @property
     @deprecated("Use document instead.")
     def legacy_document(self):

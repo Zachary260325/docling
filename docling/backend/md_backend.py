@@ -22,43 +22,17 @@ from docling_core.types.doc import (
 )
 from docling_core.types.doc.document import Formatting
 
-# Global registry to store original markdown content by document hash
-_ORIGINAL_MARKDOWN_REGISTRY = {}
-
-
-def _get_original_markdown(self) -> Optional[str]:
-    """Get the original markdown content if available.
-    
-    Returns:
-        The original markdown content if this document was created from markdown,
-        None otherwise.
-    """
-    if self.origin and self.origin.binary_hash:
-        return _ORIGINAL_MARKDOWN_REGISTRY.get(self.origin.binary_hash)
-    return None
-
-
-def _export_to_original_markdown(self) -> Optional[str]:
-    """Export to original markdown content if available, otherwise use regular export.
-    
-    Returns:
-        The original markdown content if available, otherwise regular export result.
-    """
-    original = self.get_original_markdown()
-    if original is not None:
-        return original
-    return self.export_to_markdown()
-
-
-def clear_original_markdown_registry():
-    """Clear the original markdown registry to free memory."""
-    global _ORIGINAL_MARKDOWN_REGISTRY
-    _ORIGINAL_MARKDOWN_REGISTRY.clear()
-
-
-# Add the methods to DoclingDocument
-DoclingDocument.get_original_markdown = _get_original_markdown
-DoclingDocument.export_to_original_markdown = _export_to_original_markdown
+from docling_core.types.doc import (
+    DocItemLabel,
+    DoclingDocument,
+    DocumentOrigin,
+    ListItem,
+    NodeItem,
+    TableCell,
+    TableData,
+    TextItem,
+)
+from docling_core.types.doc.document import Formatting
 from marko import Markdown
 from pydantic import AnyUrl, BaseModel, Field, TypeAdapter
 from typing_extensions import Annotated
@@ -102,29 +76,6 @@ _CreationPayload = Annotated[
 
 
 class MarkdownDocumentBackend(DeclarativeDocumentBackend):
-    def _shorten_underscore_sequences(self, markdown_text: str, max_length: int = 10):
-        # This regex will match any sequence of underscores
-        pattern = r"_+"
-
-        def replace_match(match):
-            underscore_sequence = match.group(
-                0
-            )  # Get the full match (sequence of underscores)
-
-            # Shorten the sequence if it exceeds max_length
-            if len(underscore_sequence) > max_length:
-                return "_" * max_length
-            else:
-                return underscore_sequence  # Leave it unchanged if it is shorter or equal to max_length
-
-        # Use re.sub to replace long underscore sequences
-        shortened_text = re.sub(pattern, replace_match, markdown_text)
-
-        if len(shortened_text) != len(markdown_text):
-            warnings.warn("Detected potentially incorrect Markdown, correcting...")
-
-        return shortened_text
-
     def __init__(self, in_doc: "InputDocument", path_or_stream: Union[BytesIO, Path]):
         super().__init__(in_doc, path_or_stream)
 
@@ -133,8 +84,7 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
         # Markdown file:
         self.path_or_stream = path_or_stream
         self.valid = True
-        self.markdown = ""  # To store original Markdown string
-        self.modified_markdown = ""  # To store processed Markdown string for parsing
+        self.markdown = ""  # To store Markdown string
 
         self.in_table = False
         self.md_table_buffer: list[str] = []
@@ -143,24 +93,14 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
         try:
             if isinstance(self.path_or_stream, BytesIO):
                 text_stream = self.path_or_stream.getvalue().decode("utf-8")
-                self.markdown = text_stream  # Store original content
-                # remove invalid sequences
-                # very long sequences of underscores will lead to unnecessary long processing times.
-                # In any proper Markdown files, underscores have to be escaped,
-                # otherwise they represent emphasis (bold or italic)
-                self.modified_markdown = self._shorten_underscore_sequences(text_stream)
+                self.markdown = text_stream
             if isinstance(self.path_or_stream, Path):
                 with open(self.path_or_stream, encoding="utf-8") as f:
                     md_content = f.read()
-                    self.markdown = md_content  # Store original content
-                    # remove invalid sequences
-                    # very long sequences of underscores will lead to unnecessary long processing times.
-                    # In any proper Markdown files, underscores have to be escaped,
-                    # otherwise they represent emphasis (bold or italic)
-                    self.modified_markdown = self._shorten_underscore_sequences(md_content)
+                    self.markdown = md_content
             self.valid = True
 
-            _log.debug(self.modified_markdown)
+            _log.debug(self.markdown)
         except Exception as e:
             raise RuntimeError(
                 f"Could not initialize MD backend for file with hash {self.document_hash}."
@@ -546,10 +486,6 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
     def is_valid(self) -> bool:
         return self.valid
 
-    def get_original_markdown(self) -> str:
-        """Get the original, unmodified markdown content."""
-        return self.markdown
-
     def unload(self):
         if isinstance(self.path_or_stream, BytesIO):
             self.path_or_stream.close()
@@ -575,18 +511,7 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
         doc = DoclingDocument(name=self.file.stem or "file", origin=origin)
 
         if self.is_valid():
-            # Store the original markdown content in the global registry
-            # Create a DocumentOrigin to see what hash will actually be used
-            temp_origin = DocumentOrigin(
-                filename=self.file.name or "file",
-                mimetype="text/markdown", 
-                binary_hash=self.document_hash,
-            )
-            # Use the actual hash that will be in the document
-            _ORIGINAL_MARKDOWN_REGISTRY[temp_origin.binary_hash] = self.markdown
-            
             # Parse the markdown into an abstract syntax tree (AST)
-            # Use the modified markdown for parsing (handles problematic content safely)
             marko_parser = Markdown()
             parsed_ast = marko_parser.parse(self.markdown)
             
