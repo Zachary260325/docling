@@ -588,7 +588,7 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
             # Parse the markdown into an abstract syntax tree (AST)
             # Use the modified markdown for parsing (handles problematic content safely)
             marko_parser = Markdown()
-            parsed_ast = marko_parser.parse(self.modified_markdown)
+            parsed_ast = marko_parser.parse(self.markdown)
             
             # Start iterating from the root of the AST
             self._iterate_elements(
