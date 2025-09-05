@@ -108,7 +108,9 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
                 # very long sequences of underscores will lead to unnecessary long processing times.
                 # In any proper Markdown files, underscores have to be escaped,
                 # otherwise they represent emphasis (bold or italic)
-                self.markdown = self._shorten_underscore_sequences(text_stream)
+                
+                # Use original text_stream directly
+                self.markdown = text_stream # self._shorten_underscore_sequences(text_stream)
             if isinstance(self.path_or_stream, Path):
                 with open(self.path_or_stream, encoding="utf-8") as f:
                     md_content = f.read()
@@ -116,7 +118,9 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
                     # very long sequences of underscores will lead to unnecessary long processing times.
                     # In any proper Markdown files, underscores have to be escaped,
                     # otherwise they represent emphasis (bold or italic)
-                    self.markdown = self._shorten_underscore_sequences(md_content)
+                    
+                    # Use original text_stream directly
+                    self.markdown = text_stream # self._shorten_underscore_sequences(md_content)
             self.valid = True
 
             _log.debug(self.markdown)
