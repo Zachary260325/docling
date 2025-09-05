@@ -133,8 +133,8 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
         # Markdown file:
         self.path_or_stream = path_or_stream
         self.valid = True
-        self.original_markdown = ""  # To store original Markdown string
-        self.markdown = ""  # To store processed Markdown string for parsing
+        self.markdown = ""  # To store original Markdown string
+        self.modified_markdown = ""  # To store processed Markdown string for parsing
 
         self.in_table = False
         self.md_table_buffer: list[str] = []
@@ -143,24 +143,24 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
         try:
             if isinstance(self.path_or_stream, BytesIO):
                 text_stream = self.path_or_stream.getvalue().decode("utf-8")
-                self.original_markdown = text_stream  # Store original content
+                self.markdown = text_stream  # Store original content
                 # remove invalid sequences
                 # very long sequences of underscores will lead to unnecessary long processing times.
                 # In any proper Markdown files, underscores have to be escaped,
                 # otherwise they represent emphasis (bold or italic)
-                self.markdown = self._shorten_underscore_sequences(text_stream)
+                self.modified_markdown = self._shorten_underscore_sequences(text_stream)
             if isinstance(self.path_or_stream, Path):
                 with open(self.path_or_stream, encoding="utf-8") as f:
                     md_content = f.read()
-                    self.original_markdown = md_content  # Store original content
+                    self.markdown = md_content  # Store original content
                     # remove invalid sequences
                     # very long sequences of underscores will lead to unnecessary long processing times.
                     # In any proper Markdown files, underscores have to be escaped,
                     # otherwise they represent emphasis (bold or italic)
-                    self.markdown = self._shorten_underscore_sequences(md_content)
+                    self.modified_markdown = self._shorten_underscore_sequences(md_content)
             self.valid = True
 
-            _log.debug(self.markdown)
+            _log.debug(self.modified_markdown)
         except Exception as e:
             raise RuntimeError(
                 f"Could not initialize MD backend for file with hash {self.document_hash}."
@@ -548,7 +548,7 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
 
     def get_original_markdown(self) -> str:
         """Get the original, unmodified markdown content."""
-        return self.original_markdown
+        return self.markdown
 
     def unload(self):
         if isinstance(self.path_or_stream, BytesIO):
@@ -583,12 +583,12 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
                 binary_hash=self.document_hash,
             )
             # Use the actual hash that will be in the document
-            _ORIGINAL_MARKDOWN_REGISTRY[temp_origin.binary_hash] = self.original_markdown
+            _ORIGINAL_MARKDOWN_REGISTRY[temp_origin.binary_hash] = self.markdown
             
             # Parse the markdown into an abstract syntax tree (AST)
-            # Use the processed markdown for parsing (handles problematic content)
+            # Use the modified markdown for parsing (handles problematic content safely)
             marko_parser = Markdown()
-            parsed_ast = marko_parser.parse(self.markdown)
+            parsed_ast = marko_parser.parse(self.modified_markdown)
             
             # Start iterating from the root of the AST
             self._iterate_elements(
