@@ -21,6 +21,7 @@ from docling_core.types.doc import (
     TextItem,
 )
 from docling_core.types.doc.document import Formatting
+from docling_core.transforms.chunker.hierarchical_chunker import HierarchicalChunker
 
 # Global registry to store original markdown content by document hash
 _ORIGINAL_MARKDOWN_REGISTRY = {}
@@ -67,9 +68,59 @@ def _export_to_markdown_with_original_fallback(self, **kwargs):
 
 
 def clear_original_markdown_registry():
-    """Clear the original markdown registry to free memory."""
+    """Clear the global registry to free memory."""
     global _ORIGINAL_MARKDOWN_REGISTRY
     _ORIGINAL_MARKDOWN_REGISTRY.clear()
+
+
+def setup_original_markdown_chunking(chunker):
+    """
+    Set up a chunker to use original markdown content when available.
+    
+    This function modifies a chunker to use a custom serializer provider
+    that preserves original markdown content during chunking.
+    
+    Args:
+        chunker: A HierarchicalChunker instance
+        
+    Returns:
+        The modified chunker with original markdown serialization support
+    """
+    from docling.chunking.original_markdown_chunker import OriginalMarkdownChunkingSerializerProvider
+    
+    # Create and assign the custom serializer provider
+    original_provider = OriginalMarkdownChunkingSerializerProvider()
+    
+    # Set the custom serializer provider on the chunker
+    chunker.serializer_provider = original_provider
+    
+    return chunker
+
+
+def create_original_markdown_chunker(**chunker_kwargs):
+    """
+    Create a HierarchicalChunker configured to use original markdown content.
+    
+    Args:
+        **chunker_kwargs: Additional arguments for chunker initialization
+        
+    Returns:
+        A configured chunker with original markdown support
+    """
+    chunker = HierarchicalChunker(**chunker_kwargs)
+    return setup_original_markdown_chunking(chunker)
+
+
+def create_single_chunk_markdown_chunker():
+    """
+    Create a special chunker that returns the entire document as a single chunk
+    with original markdown content preserved.
+    
+    Returns:
+        A chunker that yields one chunk containing the original markdown
+    """
+    from docling.chunking.original_markdown_chunker import SingleChunkMarkdownChunker
+    return SingleChunkMarkdownChunker()
 
 
 # Store the original export_to_markdown method before overriding
