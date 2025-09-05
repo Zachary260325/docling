@@ -95,7 +95,8 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
         # Markdown file:
         self.path_or_stream = path_or_stream
         self.valid = True
-        self.markdown = ""  # To store original Markdown string
+        self.original_markdown = ""  # To store original Markdown string
+        self.markdown = ""  # To store processed Markdown string for parsing
 
         self.in_table = False
         self.md_table_buffer: list[str] = []
@@ -104,6 +105,7 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
         try:
             if isinstance(self.path_or_stream, BytesIO):
                 text_stream = self.path_or_stream.getvalue().decode("utf-8")
+                self.original_markdown = text_stream  # Store original content
                 # remove invalid sequences
                 # very long sequences of underscores will lead to unnecessary long processing times.
                 # In any proper Markdown files, underscores have to be escaped,
@@ -112,6 +114,7 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
             if isinstance(self.path_or_stream, Path):
                 with open(self.path_or_stream, encoding="utf-8") as f:
                     md_content = f.read()
+                    self.original_markdown = md_content  # Store original content
                     # remove invalid sequences
                     # very long sequences of underscores will lead to unnecessary long processing times.
                     # In any proper Markdown files, underscores have to be escaped,
@@ -504,6 +507,10 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
 
     def is_valid(self) -> bool:
         return self.valid
+
+    def get_original_markdown(self) -> str:
+        """Get the original, unmodified markdown content."""
+        return self.original_markdown
 
     def unload(self):
         if isinstance(self.path_or_stream, BytesIO):
