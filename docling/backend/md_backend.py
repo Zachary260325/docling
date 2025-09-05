@@ -21,6 +21,44 @@ from docling_core.types.doc import (
     TextItem,
 )
 from docling_core.types.doc.document import Formatting
+
+# Global registry to store original markdown content by document hash
+_ORIGINAL_MARKDOWN_REGISTRY = {}
+
+
+def _get_original_markdown(self) -> Optional[str]:
+    """Get the original markdown content if available.
+    
+    Returns:
+        The original markdown content if this document was created from markdown,
+        None otherwise.
+    """
+    if self.origin and self.origin.binary_hash:
+        return _ORIGINAL_MARKDOWN_REGISTRY.get(self.origin.binary_hash)
+    return None
+
+
+def _export_to_original_markdown(self) -> Optional[str]:
+    """Export to original markdown content if available, otherwise use regular export.
+    
+    Returns:
+        The original markdown content if available, otherwise regular export result.
+    """
+    original = self.get_original_markdown()
+    if original is not None:
+        return original
+    return self.export_to_markdown()
+
+
+def clear_original_markdown_registry():
+    """Clear the original markdown registry to free memory."""
+    global _ORIGINAL_MARKDOWN_REGISTRY
+    _ORIGINAL_MARKDOWN_REGISTRY.clear()
+
+
+# Add the methods to DoclingDocument
+DoclingDocument.get_original_markdown = _get_original_markdown
+DoclingDocument.export_to_original_markdown = _export_to_original_markdown
 from marko import Markdown
 from pydantic import AnyUrl, BaseModel, Field, TypeAdapter
 from typing_extensions import Annotated
@@ -537,9 +575,21 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
         doc = DoclingDocument(name=self.file.stem or "file", origin=origin)
 
         if self.is_valid():
+            # Store the original markdown content in the global registry
+            # Create a DocumentOrigin to see what hash will actually be used
+            temp_origin = DocumentOrigin(
+                filename=self.file.name or "file",
+                mimetype="text/markdown", 
+                binary_hash=self.document_hash,
+            )
+            # Use the actual hash that will be in the document
+            _ORIGINAL_MARKDOWN_REGISTRY[temp_origin.binary_hash] = self.original_markdown
+            
             # Parse the markdown into an abstract syntax tree (AST)
+            # Use the processed markdown for parsing (handles problematic content)
             marko_parser = Markdown()
             parsed_ast = marko_parser.parse(self.markdown)
+            
             # Start iterating from the root of the AST
             self._iterate_elements(
                 element=parsed_ast,
