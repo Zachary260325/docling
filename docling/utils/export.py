@@ -108,9 +108,21 @@ def generate_multimodal_pages(
 
         page_cells = _process_page_cells(page=page)
         page_segments = _process_page_segments(doc_items=doc_items, page=page)
-        content_md = doc.export_to_markdown(
-            main_text_start=start_ix, main_text_stop=end_ix
-        )
+        
+        # For markdown files, try to use original content when processing entire document
+        original_md = doc_result.get_original_markdown()
+        if (original_md is not None and 
+            start_ix == 0 and 
+            doc.main_text is not None and 
+            end_ix == len(doc.main_text) - 1):
+            # Use original markdown when processing the entire document
+            content_md = original_md
+        else:
+            # Use regular export for partial ranges or non-markdown documents
+            content_md = doc.export_to_markdown(
+                main_text_start=start_ix, main_text_stop=end_ix
+            )
+        
         # No page-tagging since we only do 1 page at the time
         content_dt = doc.export_to_document_tokens(
             main_text_start=start_ix, main_text_stop=end_ix, add_page_index=False
@@ -120,6 +132,65 @@ def generate_multimodal_pages(
 
     if doc.main_text is None:
         return
+    
+    # Special handling for markdown documents and other non-paginated formats
+    # If we have items but they don't have page information, treat as single page
+    has_items_with_pages = False
+    for ix, orig_item in enumerate(doc.main_text):
+        item = doc._resolve_ref(orig_item) if isinstance(orig_item, Ref) else orig_item
+        if item is not None and item.prov is not None and len(item.prov) > 0:
+            has_items_with_pages = True
+            break
+    
+    if not has_items_with_pages:
+        # Handle as single page document (e.g., markdown)
+        page_no = 1
+        start_ix = 0
+        end_ix = len(doc.main_text) - 1
+        doc_items = [(ix, item) for ix, item in enumerate(doc.main_text)]
+        
+        # Create a dummy page if no pages exist
+        if not doc_result.pages:
+            # For markdown, we still need to yield the content
+            content_text = ""
+            for item in doc.main_text:
+                resolved_item = doc._resolve_ref(item) if isinstance(item, Ref) else item
+                if resolved_item and resolved_item.text:
+                    content_text += resolved_item.text + " "
+            
+            # Get original markdown if available
+            original_md = doc_result.get_original_markdown()
+            if original_md is not None:
+                content_md = original_md
+            else:
+                content_md = doc.export_to_markdown(
+                    main_text_start=start_ix, main_text_stop=end_ix
+                )
+            
+            content_dt = doc.export_to_document_tokens(
+                main_text_start=start_ix, main_text_stop=end_ix, add_page_index=False
+            )
+            
+            # Create empty page data for consistency
+            page_cells = []
+            page_segments = []
+            
+            # Create a dummy page object if needed
+            from docling.datamodel.document import Page as PageClass
+            from docling_core.types.doc import Size
+            dummy_page = PageClass(
+                page_no=1,
+                size=Size(width=210, height=297),  # A4 size in mm
+                cells=[],
+            )
+            
+            yield content_text, content_md, content_dt, page_cells, page_segments, dummy_page
+        else:
+            # Use the first page if available
+            yield _process_page()
+        return
+    
+    # Normal processing for paginated documents
     for ix, orig_item in enumerate(doc.main_text):
         item = doc._resolve_ref(orig_item) if isinstance(orig_item, Ref) else orig_item
         if item is None or item.prov is None or len(item.prov) == 0:

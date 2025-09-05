@@ -50,15 +50,36 @@ def _export_to_original_markdown(self) -> Optional[str]:
     return self.export_to_markdown()
 
 
+def _export_to_markdown_with_original_fallback(self, **kwargs):
+    """Override export_to_markdown to use original content when available for markdown documents."""
+    # Check if this document has original markdown content
+    original = self.get_original_markdown()
+    if original is not None:
+        # If no specific range is requested, return the original markdown
+        if not kwargs or (kwargs.get('main_text_start') == 0 and 
+                         kwargs.get('main_text_stop') is None):
+            return original
+        # If a specific range is requested, fall back to regular export
+        # to respect the chunking parameters
+    
+    # Use the original export_to_markdown method
+    return self._original_export_to_markdown(**kwargs)
+
+
 def clear_original_markdown_registry():
     """Clear the original markdown registry to free memory."""
     global _ORIGINAL_MARKDOWN_REGISTRY
     _ORIGINAL_MARKDOWN_REGISTRY.clear()
 
 
+# Store the original export_to_markdown method before overriding
+if not hasattr(DoclingDocument, '_original_export_to_markdown'):
+    DoclingDocument._original_export_to_markdown = DoclingDocument.export_to_markdown
+
 # Add the methods to DoclingDocument
 DoclingDocument.get_original_markdown = _get_original_markdown
 DoclingDocument.export_to_original_markdown = _export_to_original_markdown
+DoclingDocument.export_to_markdown = _export_to_markdown_with_original_fallback
 from marko import Markdown
 from pydantic import AnyUrl, BaseModel, Field, TypeAdapter
 from typing_extensions import Annotated
