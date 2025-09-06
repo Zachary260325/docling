@@ -96,6 +96,7 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
         self.path_or_stream = path_or_stream
         self.valid = True
         self.markdown = ""  # To store original Markdown string
+        self._original_markdown = ""  # Backup copy of original markdown (read-only)
 
         self.in_table = False
         self.md_table_buffer: list[str] = []
@@ -104,31 +105,73 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
         try:
             if isinstance(self.path_or_stream, BytesIO):
                 text_stream = self.path_or_stream.getvalue().decode("utf-8")
-                # remove invalid sequences
-                # very long sequences of underscores will lead to unnecessary long processing times.
-                # In any proper Markdown files, underscores have to be escaped,
-                # otherwise they represent emphasis (bold or italic)
+                # Store original content without any modifications
+                self._original_markdown = text_stream
+                self.markdown = text_stream  # Use original content directly
                 
-                # Use original text_stream directly
-                self.markdown = text_stream # self._shorten_underscore_sequences(text_stream)
-            if isinstance(self.path_or_stream, Path):
+            elif isinstance(self.path_or_stream, Path):
                 with open(self.path_or_stream, encoding="utf-8") as f:
                     md_content = f.read()
-                    # remove invalid sequences
-                    # very long sequences of underscores will lead to unnecessary long processing times.
-                    # In any proper Markdown files, underscores have to be escaped,
-                    # otherwise they represent emphasis (bold or italic)
-                    
-                    # Use original md_content directly
-                    self.markdown = md_content # self._shorten_underscore_sequences(md_content)
+                    # Store original content without any modifications
+                    self._original_markdown = md_content
+                    self.markdown = md_content  # Use original content directly
             self.valid = True
 
             _log.debug(self.markdown)
+            
+            # Verify original content is preserved
+            assert self.markdown == self._original_markdown, "Original markdown content was modified during initialization!"
+            
         except Exception as e:
             raise RuntimeError(
                 f"Could not initialize MD backend for file with hash {self.document_hash}."
             ) from e
         return
+
+    def get_original_markdown(self) -> str:
+        """
+        Returns the original, unmodified markdown content.
+        This is a read-only copy that should never be modified.
+        """
+        return self._original_markdown
+
+    def verify_content_preservation(self) -> bool:
+        """
+        Verifies that the original markdown content has been preserved.
+        Returns True if content is identical to the original.
+        """
+        return self.markdown == self._original_markdown
+
+    def debug_content_differences(self) -> dict:
+        """
+        Returns debugging information about any differences between current and original content.
+        Useful for troubleshooting preservation issues.
+        """
+        result = {
+            "is_preserved": self.verify_content_preservation(),
+            "original_length": len(self._original_markdown),
+            "current_length": len(self.markdown),
+            "length_difference": len(self.markdown) - len(self._original_markdown),
+            "original_hash": hash(self._original_markdown),
+            "current_hash": hash(self.markdown),
+        }
+        
+        if not result["is_preserved"]:
+            # Find first difference
+            min_len = min(len(self._original_markdown), len(self.markdown))
+            first_diff_pos = None
+            for i in range(min_len):
+                if self._original_markdown[i] != self.markdown[i]:
+                    first_diff_pos = i
+                    break
+            
+            result.update({
+                "first_difference_at": first_diff_pos,
+                "original_sample": self._original_markdown[:100] + "..." if len(self._original_markdown) > 100 else self._original_markdown,
+                "current_sample": self.markdown[:100] + "..." if len(self.markdown) > 100 else self.markdown,
+            })
+        
+        return result
 
     def _close_table(self, doc: DoclingDocument):
         if self.in_table:
@@ -525,6 +568,10 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
     def convert(self) -> DoclingDocument:
         _log.debug("converting Markdown...")
 
+        # Verify original content is still preserved before conversion
+        if not self.verify_content_preservation():
+            _log.warning("Original markdown content has been modified!")
+        
         origin = DocumentOrigin(
             filename=self.file.name or "file",
             mimetype="text/markdown",
@@ -535,8 +582,15 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
 
         if self.is_valid():
             # Parse the markdown into an abstract syntax tree (AST)
+            # Note: marko.parse() only reads the string and creates an AST - it does NOT modify the original string
             marko_parser = Markdown()
+            original_before_parsing = self.markdown
             parsed_ast = marko_parser.parse(self.markdown)
+            
+            # Verify that marko didn't modify our original content
+            assert self.markdown == original_before_parsing, "Marko parser modified the original markdown content!"
+            assert self.verify_content_preservation(), "Original markdown content integrity lost during parsing!"
+            
             # Start iterating from the root of the AST
             self._iterate_elements(
                 element=parsed_ast,
