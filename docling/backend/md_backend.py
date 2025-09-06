@@ -591,6 +591,11 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
             assert self.markdown == original_before_parsing, "Marko parser modified the original markdown content!"
             assert self.verify_content_preservation(), "Original markdown content integrity lost during parsing!"
             
+            # Store original markdown content in the document
+            # Since DoclingDocument doesn't have a built-in field for this,
+            # we add it as a custom attribute using object.__setattr__ to bypass Pydantic restrictions
+            object.__setattr__(doc, '_original_markdown', self._original_markdown)
+            
             # Start iterating from the root of the AST
             self._iterate_elements(
                 element=parsed_ast,
@@ -637,10 +642,21 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
                     in_doc=in_doc, path_or_stream=stream
                 )
                 doc = html_backend_obj.convert()
+                # Preserve original markdown even when using HTML backend
+                object.__setattr__(doc, '_original_markdown', self._original_markdown)
         else:
             raise RuntimeError(
                 f"Cannot convert md with {self.document_hash} because the backend failed to init."
             )
+        
+        # Add a method to the document instance to access original markdown
+        def get_original_markdown():
+            """Get the original markdown content that was used to create this document."""
+            return getattr(doc, '_original_markdown', None)
+            
+        # Monkey patch the method onto the document instance using object.__setattr__
+        object.__setattr__(doc, 'get_original_markdown', get_original_markdown)
+        
         return doc
 
     def chunk_with_original_preservation(self, **chunker_kwargs):

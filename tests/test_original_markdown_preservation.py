@@ -44,6 +44,45 @@ class TestOriginalMarkdownPreservation:
         # Should be a string
         assert isinstance(original, str)
 
+    def test_original_markdown_accessible_from_document(self, backend_with_content):
+        """Test that original markdown can be accessed from the converted document."""
+        # Convert the document
+        doc = backend_with_content.convert()
+        
+        # Should be able to get original markdown from document
+        assert hasattr(doc, 'get_original_markdown'), "Document should have get_original_markdown method"
+        
+        original_from_doc = doc.get_original_markdown()
+        original_from_backend = backend_with_content.get_original_markdown()
+        
+        # Should be the same content
+        assert original_from_doc is not None
+        assert original_from_doc == original_from_backend
+        
+        # Should be a string
+        assert isinstance(original_from_doc, str)
+        assert len(original_from_doc) > 0
+
+    def test_document_without_original_markdown(self):
+        """Test accessing original markdown from a document that doesn't have it."""
+        from docling_core.types.doc import DoclingDocument, DocumentOrigin
+        
+        # Create a document without original markdown
+        doc = DoclingDocument(
+            name="test",
+            origin=DocumentOrigin(
+                filename="test.md",
+                mimetype="text/markdown", 
+                binary_hash=12345
+            )
+        )
+        
+        # Should not have the get_original_markdown method
+        assert not hasattr(doc, 'get_original_markdown'), "Document should not have get_original_markdown method"
+        
+        # Direct attribute access should return None
+        assert getattr(doc, '_original_markdown', None) is None
+
     def test_original_markdown_preservation_in_chunks(self, backend_with_content):
         """Test that chunks preserve original markdown in metadata."""
         # Create chunks with original preservation
