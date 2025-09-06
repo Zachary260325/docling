@@ -642,3 +642,27 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
                 f"Cannot convert md with {self.document_hash} because the backend failed to init."
             )
         return doc
+
+    def chunk_with_original_preservation(self, **chunker_kwargs):
+        """
+        Convenience method to chunk this document while preserving original markdown.
+        
+        Args:
+            **chunker_kwargs: Additional arguments for the chunker
+            
+        Returns:
+            List of chunks with original markdown preserved in metadata
+            
+        Example:
+            backend = MarkdownDocumentBackend(in_doc=in_doc, path_or_stream=path)
+            doc = backend.convert()
+            chunks = backend.chunk_with_original_preservation()
+        """
+        from docling_core.transforms.chunker.hierarchical_chunker import OriginalPreservingChunker
+        
+        doc = self.convert()
+        chunker = OriginalPreservingChunker(
+            original_markdown_text=self.get_original_markdown(),
+            **chunker_kwargs
+        )
+        return list(chunker.chunk(doc))
