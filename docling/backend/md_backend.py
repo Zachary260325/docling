@@ -119,8 +119,8 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
                     # In any proper Markdown files, underscores have to be escaped,
                     # otherwise they represent emphasis (bold or italic)
                     
-                    # Use original text_stream directly
-                    self.markdown = text_stream # self._shorten_underscore_sequences(md_content)
+                    # Use original md_content directly
+                    self.markdown = md_content # self._shorten_underscore_sequences(md_content)
             self.valid = True
 
             _log.debug(self.markdown)
@@ -535,11 +535,11 @@ class MarkdownDocumentBackend(DeclarativeDocumentBackend):
 
         if self.is_valid():
             # Parse the markdown into an abstract syntax tree (AST)
-            # marko_parser = Markdown()
-            # parsed_ast = marko_parser.parse(self.markdown)
+            marko_parser = Markdown()
+            parsed_ast = marko_parser.parse(self.markdown)
             # Start iterating from the root of the AST
             self._iterate_elements(
-                element=self.markdown,  # parsed_ast,
+                element=parsed_ast,
                 depth=0,
                 doc=doc,
                 parent_item=None,
