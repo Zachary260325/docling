@@ -45,7 +45,7 @@ requires-python = '>=3.9,<4.0'
 dependencies = [
   'pydantic (>=2.0.0,<3.0.0)',
   # Using fork with original markdown preservation support
-  'docling-core[chunking] @ git+https://github.com/Zachary260325/docling-core.git@dummy',
+  'docling-core[chunking]',
   'docling-parse (>=4.4.0,<5.0.0)',
   "docling-ibm-models>=3.9.1,<4",
   'filetype (>=1.2.0,<2.0.0)',
@@ -111,6 +111,7 @@ asr = [
 
 [dependency-groups]
 dev = [
+    'docling-core[chunking] @ git+https://github.com/Zachary260325/docling-core.git@dummy',
     "pre-commit~=3.7",
     "mypy~=1.10",
     "types-setuptools~=70.3",
